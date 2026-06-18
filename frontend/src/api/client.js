@@ -26,11 +26,11 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  register: (email, password) =>
-    request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  register: (email, password, turnstileToken) =>
+    request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, turnstileToken }) }),
 
-  login: (email, password) =>
-    request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: (email, password, turnstileToken) =>
+    request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, turnstileToken }) }),
 
   getEmails: (params = {}) => {
     const query = new URLSearchParams();

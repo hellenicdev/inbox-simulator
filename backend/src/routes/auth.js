@@ -2,17 +2,21 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { verifyTurnstileToken } from '../services/turnstile.js';
 
 const router = Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, turnstileToken } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    if (!(await verifyTurnstileToken(turnstileToken))) {
+      return res.status(403).json({ error: 'Security check failed. Please try again.' });
     }
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
@@ -30,9 +34,12 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, turnstileToken } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
+    }
+    if (!(await verifyTurnstileToken(turnstileToken))) {
+      return res.status(403).json({ error: 'Security check failed. Please try again.' });
     }
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
