@@ -1,9 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
 import { Spinner } from '../UI/Skeleton';
 
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+
+function loadTurnstileScript() {
+  return new Promise((resolve) => {
+    if (window.turnstile) return resolve();
+    const cb = 'onTurnstileReady_' + Date.now();
+    window[cb] = () => { resolve(); delete window[cb]; };
+    const s = document.createElement('script');
+    s.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?onload=${cb}&render=explicit`;
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  });
+}
 
 export default function AuthPage() {
   const { login } = useAuth();
@@ -14,35 +27,51 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const widgetRef = useRef(null);
   const turnstileId = useRef(null);
+  const scriptLoaded = useRef(false);
+
+  const renderWidget = useCallback(() => {
+    if (!widgetRef.current || !window.turnstile) return;
+    if (turnstileId.current) {
+      window.turnstile.remove(turnstileId.current);
+      turnstileId.current = null;
+    }
+    widgetRef.current.innerHTML = '';
+    turnstileId.current = window.turnstile.render(widgetRef.current, {
+      sitekey: SITE_KEY,
+      theme: document.documentElement.getAttribute('data-theme') || 'light',
+    });
+  }, []);
 
   useEffect(() => {
-    const render = () => {
-      if (!window.turnstile || widgetRef.current) return;
-      turnstileId.current = window.turnstile.render(widgetRef.current, {
-        sitekey: SITE_KEY,
-        theme: document.documentElement.getAttribute('data-theme') || 'light',
-      });
-    };
-    if (window.turnstile) {
-      render();
-    } else {
-      window.addEventListener('load', render);
-      return () => window.removeEventListener('load', render);
-    }
-  }, [mode]);
+    if (scriptLoaded.current) return;
+    scriptLoaded.current = true;
+    loadTurnstileScript().then(renderWidget);
+  }, [renderWidget]);
 
   useEffect(() => {
-    if (window.turnstile && turnstileId.current) {
-      window.turnstile.reset(turnstileId.current);
-    }
-  }, [mode]);
+    if (window.turnstile) renderWidget();
+  }, [mode, renderWidget]);
+
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      if (window.turnstile && turnstileId.current) {
+        window.turnstile.render(widgetRef.current, {
+          sitekey: SITE_KEY,
+          theme: theme || 'light',
+        });
+      }
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const token = window.turnstile ? window.turnstile.getResponse() : '';
+    const token = window.turnstile ? window.turnstile.getResponse(turnstileId.current) : '';
     if (window.turnstile && !token) {
       setError('Please complete the security check.');
       setLoading(false);
@@ -94,7 +123,7 @@ export default function AuthPage() {
               minLength={6}
             />
           </div>
-          <div ref={widgetRef} style={{ marginBottom: '12px' }} />
+          <div ref={widgetRef} style={{ marginBottom: '12px', minHeight: '65px' }} />
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? <Spinner /> : mode === 'login' ? 'Sign In' : 'Create Account'}
           </button>
