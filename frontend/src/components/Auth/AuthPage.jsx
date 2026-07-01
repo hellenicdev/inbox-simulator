@@ -25,6 +25,8 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
   const widgetRef = useRef(null);
   const turnstileId = useRef(null);
   const scriptLoaded = useRef(false);
@@ -32,21 +34,42 @@ export default function AuthPage() {
   const renderWidget = useCallback(() => {
     if (!widgetRef.current || !window.turnstile) return;
     if (turnstileId.current) {
-      window.turnstile.remove(turnstileId.current);
+      try { window.turnstile.remove(turnstileId.current); } catch {}
       turnstileId.current = null;
     }
     widgetRef.current.innerHTML = '';
-    turnstileId.current = window.turnstile.render(widgetRef.current, {
-      sitekey: SITE_KEY,
-      theme: document.documentElement.getAttribute('data-theme') || 'light',
-    });
+    try {
+      turnstileId.current = window.turnstile.render(widgetRef.current, {
+        sitekey: SITE_KEY,
+        theme: document.documentElement.getAttribute('data-theme') || 'light',
+        retry: 'never',
+        'error-callback': () => {
+          setTurnstileFailed(true);
+        },
+        callback: () => {
+          setTurnstileFailed(false);
+        },
+      });
+      setTurnstileReady(true);
+    } catch (e) {
+      setTurnstileFailed(true);
+    }
   }, []);
+
+  const loadAndRender = useCallback(async () => {
+    try {
+      await loadTurnstileScript();
+      renderWidget();
+    } catch {
+      setTurnstileFailed(true);
+    }
+  }, [renderWidget]);
 
   useEffect(() => {
     if (scriptLoaded.current) return;
     scriptLoaded.current = true;
-    loadTurnstileScript().then(renderWidget);
-  }, [renderWidget]);
+    loadAndRender();
+  }, [loadAndRender]);
 
   useEffect(() => {
     if (window.turnstile) renderWidget();
@@ -55,11 +78,13 @@ export default function AuthPage() {
   useEffect(() => {
     const obs = new MutationObserver(() => {
       const theme = document.documentElement.getAttribute('data-theme');
-      if (window.turnstile && turnstileId.current) {
-        window.turnstile.render(widgetRef.current, {
-          sitekey: SITE_KEY,
-          theme: theme || 'light',
-        });
+      if (window.turnstile && widgetRef.current) {
+        try {
+          window.turnstile.render(widgetRef.current, {
+            sitekey: SITE_KEY,
+            theme: theme || 'light',
+          });
+        } catch {}
       }
     });
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -71,11 +96,11 @@ export default function AuthPage() {
     setLoading(true);
     setError('');
 
-    const token = window.turnstile ? window.turnstile.getResponse(turnstileId.current) : '';
-    if (window.turnstile && !token) {
-      setError('Please complete the security check.');
-      setLoading(false);
-      return;
+    let token = '';
+    if (window.turnstile && turnstileId.current) {
+      try {
+        token = window.turnstile.getResponse(turnstileId.current) || '';
+      } catch {}
     }
 
     try {
@@ -85,7 +110,7 @@ export default function AuthPage() {
     } catch (err) {
       setError(err.message);
       if (window.turnstile && turnstileId.current) {
-        window.turnstile.reset(turnstileId.current);
+        try { window.turnstile.reset(turnstileId.current); } catch {}
       }
     } finally {
       setLoading(false);
@@ -98,6 +123,11 @@ export default function AuthPage() {
         <h1>Executive Inbox</h1>
         <p>Gmail-style AI-powered inbox simulation</p>
         {error && <div className="auth-error">{error}</div>}
+        {turnstileFailed && (
+          <div className="auth-error" style={{ fontSize: '12px', marginBottom: 0 }}>
+            Security check unavailable — reload to retry.
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div>
             <label htmlFor="email">Email</label>
