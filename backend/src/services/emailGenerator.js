@@ -1,6 +1,8 @@
-import { getModel } from '../config/gemini.js';
+import { getGroq } from '../config/groq.js';
 import Sender from '../models/Sender.js';
 import Email from '../models/Email.js';
+
+const MODEL = 'llama-3.1-8b-instant';
 
 const TOPICS = [
   'a product launch announcement',
@@ -39,7 +41,7 @@ export async function generateEmailsForUser(userId, count = 2) {
   const senders = await Sender.aggregate([{ $sample: { size: count } }]);
   if (!senders.length) return [];
 
-  const model = getModel();
+  const groq = getGroq();
   const results = [];
 
   for (const sender of senders) {
@@ -61,8 +63,16 @@ export async function generateEmailsForUser(userId, count = 2) {
 
       const subject = `Re: ${subjectTopic}`;
 
-      const result = await model.generateContent(prompt);
-      const body = result.response.text().trim();
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: MODEL,
+        temperature: 0.8,
+        max_tokens: 600,
+      });
+
+      const body = completion.choices[0]?.message?.content?.trim() || '';
+
+      if (!body) continue;
 
       const email = await Email.create({
         userId,
@@ -75,7 +85,7 @@ export async function generateEmailsForUser(userId, count = 2) {
 
       results.push(email);
     } catch (err) {
-      console.error(`Gemini generation error for ${sender.name}:`, err.message);
+      console.error(`Groq generation error for ${sender.name}:`, err.message);
     }
   }
 
