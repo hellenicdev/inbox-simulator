@@ -31,6 +31,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://inbox-simulator.onrender.com/api' }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAADnLxV1cV8I_kXwL' }}
 
       - uses: actions/configure-pages@v4
         with:
