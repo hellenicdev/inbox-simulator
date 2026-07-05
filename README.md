@@ -1,4 +1,5 @@
 # Executive Inbox Simulator
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6S31XB030)
 
 A Gmail-style inbox where users receive highly realistic AI-generated emails from high-profile world archetypes in business, tech, media, sports, and entertainment.
 
