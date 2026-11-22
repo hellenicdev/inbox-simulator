@@ -9,6 +9,7 @@ import Sender from './models/Sender.js';
 import { senders as seedSenders } from './seed/data.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
