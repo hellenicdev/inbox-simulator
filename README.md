@@ -1,125 +1,113 @@
 # Executive Inbox Simulator
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6S31XB030)
 
-A Gmail-style inbox where users receive highly realistic AI-generated emails from high-profile world archetypes in business, tech, media, sports, and entertainment.
+A Gmail-style inbox that fills up with realistic, AI-generated emails from high-profile archetypes in business, tech, media, sports and entertainment. Ever wondered what a CEO's inbox looks like? Now you can live in it.
 
-## Project Structure
+**Live:** https://hellenicdev.eu/inbox-simulator/
+
+## Features
+
+- Familiar three-pane inbox: sidebar, email list and preview panel
+- On-demand AI email generation from a roster of sender archetypes
+- Inbox, Archive and Spam folders, read/unread state and categories
+- Full-text search across subject, body and sender
+- Accounts with JWT auth and Cloudflare Turnstile protection
+- Rate limiting on the whole API, sign-in and AI generation
+- Loading skeletons, toasts, error boundary and responsive layout
+
+## Tech stack
+
+| Layer | Tech |
+| --- | --- |
+| Frontend | React, Vite (GitHub Pages via GitHub Actions) |
+| Backend | Node.js, Express, JWT, bcrypt, express-rate-limit |
+| AI | Groq API |
+| Database | MongoDB Atlas via Mongoose |
+| Hosting | GitHub Pages (frontend), Render (API) |
+
+## Getting started
+
+Requirements: Node.js 18+, a MongoDB connection string and a Groq API key.
+
+```bash
+git clone https://github.com/hellenicdev/inbox-simulator.git
+cd inbox-simulator
+
+# API
+cd backend
+cp .env.example .env   # fill in the values
+npm install
+npm run dev
+
+# Frontend (new terminal)
+cd ../frontend
+cp .env.example .env
+npm install
+npm run dev            # http://localhost:5173/inbox-simulator/
+```
+
+Sender archetypes are seeded automatically on first start.
+
+### Environment variables
+
+Backend (`backend/.env`):
+
+| Name | Purpose |
+| --- | --- |
+| `MONGO_URI` | MongoDB connection string |
+| `GROQ_API_KEY` | Groq API key for email generation |
+| `JWT_SECRET` | Secret used to sign auth tokens (required, the server won't start without it) |
+| `PORT` | API port (default `3001`) |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret (verification is skipped if unset) |
+
+Frontend (`frontend/.env`, or repository variables for the Pages workflow):
+
+| Name | Purpose |
+| --- | --- |
+| `VITE_API_URL` | Base URL of the API, including `/api` |
+| `VITE_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key |
+
+CORS is restricted to `https://hellenicdev.eu`.
+
+## API
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Create an account |
+| `POST` | `/api/auth/login` | Sign in |
+| `GET` | `/api/emails` | List emails (`folder`, `search`, `category`, `page`, `limit`) |
+| `GET` | `/api/emails/refresh` | Generate new emails |
+| `PATCH` | `/api/emails/:id` | Update `read` or `folder` |
+| `GET` | `/api/senders` | List sender archetypes |
+| `GET` | `/api/health` | Health check |
+
+## Project structure
 
 ```
 inbox-simulator/
-├── backend/          # Node.js + Express + MongoDB + Gemini
+├── .github/workflows/deploy.yml   Builds and publishes the frontend to Pages
+├── backend/
 │   ├── src/
-│   │   ├── server.js
-│   │   ├── config/        # DB and Gemini config
-│   │   ├── models/        # User, Email, Sender schemas
-│   │   ├── routes/        # Auth, Emails, Senders API
-│   │   ├── middleware/     # JWT auth middleware
-│   │   ├── services/      # Gemini email generator
-│   │   └── seed/          # Sender archetypes seeder
+│   │   ├── config/        Database and Groq config
+│   │   ├── middleware/    JWT auth, rate limiting
+│   │   ├── models/        User, Email, Sender
+│   │   ├── routes/        Auth, emails, senders
+│   │   ├── seed/          Sender archetypes
+│   │   ├── services/      Email generator, Turnstile
+│   │   └── server.js
 │   └── render.yaml
-├── frontend/         # React + Vite
-│   └── src/
-│       ├── api/           # Backend API client
-│       ├── context/       # Auth context
-│       ├── components/    # React components
-│       ├── hooks/         # Custom hooks
-│       └── utils/         # Date formatting, constants
-└── README.md
+└── frontend/
+    └── src/
+        ├── api/           API client
+        ├── components/    Auth, Email, Layout, UI
+        ├── context/       Auth context
+        ├── hooks/         useEmails
+        └── utils/         Constants, date formatting
 ```
 
-## Prerequisites
+## License
 
-- Node.js 18+
-- MongoDB Atlas account (free tier)
-- Gemini API key (from Google AI Studio)
-- Render account (free tier) OR local development
-- GitHub account (for Pages deployment)
+© 2026 HellenicDev. All rights reserved.
 
-## Backend Setup
-
-1. Navigate to `backend/` and install dependencies:
-   ```bash
-   cd backend
-   npm install
-   ```
-
-2. Copy `.env.example` to `.env` and fill in your credentials:
-   ```
-   MONGO_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/inbox-simulator
-   GEMINI_API_KEY=AIza...
-   JWT_SECRET=your-secret-key-here
-   PORT=3001
-   FRONTEND_URL=http://localhost:5173
-   ```
-
-3. Seed the sender archetypes:
-   ```bash
-   npm run seed
-   ```
-
-4. Start the server:
-   ```bash
-   npm run dev
-   ```
-
-## Frontend Setup
-
-1. Navigate to `frontend/` and install dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. Set the API URL in `.env`:
-   ```
-   VITE_API_URL=http://localhost:3001/api
-   ```
-
-3. Start dev server:
-   ```bash
-   npm run dev
-   ```
-
-4. Open http://localhost:5173 in your browser.
-
-## Deployment
-
-### Backend → Render
-
-1. Push the `backend/` directory to GitHub
-2. In Render dashboard, create a new Web Service
-3. Connect your repository
-4. Set:
-   - **Build Command**: `npm install`
-   - **Start Command**: `node src/server.js`
-5. Add environment variables (MONGO_URI, GEMINI_API_KEY, JWT_SECRET, FRONTEND_URL)
-6. Deploy
-
-### Frontend → GitHub Pages
-
-1. Update `VITE_API_URL` in `frontend/.env` to your Render backend URL
-2. Set the correct `base` in `vite.config.js` (your repo name)
-3. Deploy:
-   ```bash
-   cd frontend
-   npm run deploy
-   ```
-4. Enable GitHub Pages in repo settings, set source to `gh-pages` branch
-
-## Email Generation
-
-Emails are generated on demand using Gemini AI:
-- **On page load**: 2 new emails are generated automatically
-- **On refresh click**: 2 more emails are generated
-- Each email matches the sender's archetype and writing style
-- All emails include the disclaimer: "Generated by AI for entertainment purposes."
-
-## Sender Archetypes
-
-20 high-profile figures across 6 categories:
-- **Tech**: Elon Musk, Tim Cook, Jeff Bezos, Sam Altman, Satya Nadella, Mark Zuckerberg
-- **Business**: Warren Buffett
-- **Media**: Oprah Winfrey
-- **Entertainment**: Taylor Swift, Beyoncé, Kylie Jenner
-- **Sports**: LeBron James, Lionel Messi, Cristiano Ronaldo
-- **Influence**: Barack Obama, Michelle Obama, Malala Yousafzai, Bill Gates, David Attenborough, Greta Thunberg
+Built by [HellenicDev](https://hellenicdev.eu).

@@ -1,42 +1,56 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import Email from '../models/Email.js';
+import mongoose from 'mongoose';
 import { generateEmailsForUser } from '../services/emailGenerator.js';
+import { generateLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 router.use(authMiddleware);
 
+const FOLDERS = ['inbox', 'archive', 'spam'];
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const toInt = (value, fallback, min, max) => {
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
+};
+
 router.get('/', async (req, res) => {
   try {
-    const { folder = 'inbox', search, category, page = 1, limit = 20 } = req.query;
+    const { search, category } = req.query;
+    const folder = FOLDERS.includes(req.query.folder) ? req.query.folder : 'inbox';
+    const page = toInt(req.query.page, 1, 1, 10000);
+    const limit = toInt(req.query.limit, 20, 1, 100);
     const filter = { userId: req.userId, folder };
 
-    if (category) {
+    if (typeof category === 'string' && category) {
       filter.category = category;
     }
 
-    if (search) {
+    if (typeof search === 'string' && search.trim()) {
+      const pattern = escapeRegex(search.trim().slice(0, 100));
       filter.$or = [
-        { subject: { $regex: search, $options: 'i' } },
-        { body: { $regex: search, $options: 'i' } },
-        { senderName: { $regex: search, $options: 'i' } },
+        { subject: { $regex: pattern, $options: 'i' } },
+        { body: { $regex: pattern, $options: 'i' } },
+        { senderName: { $regex: pattern, $options: 'i' } },
       ];
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const emails = await Email.find(filter)
-      .sort({ timestamp: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
-
-    const total = await Email.countDocuments(filter);
+    const [emails, total] = await Promise.all([
+      Email.find(filter)
+        .sort({ timestamp: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Email.countDocuments(filter),
+    ]);
 
     res.json({
       emails,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
+      page,
+      pages: Math.ceil(total / limit),
     });
   } catch (err) {
     console.error('Fetch emails error:', err);
@@ -44,7 +58,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/refresh', async (req, res) => {
+router.get('/refresh', generateLimiter, async (req, res) => {
   try {
     const newEmails = await generateEmailsForUser(req.userId, 2);
     res.json({ generated: newEmails.length, emails: newEmails });
@@ -60,10 +74,22 @@ router.get('/refresh', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   try {
-    const { read, folder } = req.body;
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ error: 'Email not found' });
+    }
+    const { read, folder } = req.body || {};
     const update = {};
-    if (read !== undefined) update.read = read;
-    if (folder !== undefined) update.folder = folder;
+    if (read !== undefined) {
+      if (typeof read !== 'boolean') return res.status(400).json({ error: 'read must be true or false' });
+      update.read = read;
+    }
+    if (folder !== undefined) {
+      if (!FOLDERS.includes(folder)) return res.status(400).json({ error: 'Invalid folder' });
+      update.folder = folder;
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
 
     const email = await Email.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
